@@ -1,4 +1,6 @@
 .env
 .git
-node_modules
-tests
+.DS_Store
+find-filament
+find-filament.exe
+dist

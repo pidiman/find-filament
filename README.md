@@ -1,44 +1,73 @@
-# Find Filament
+# Find Filament · Go
 
-Jednoduchá slovenská PWA pre mobil: **FILAMENT ME → odfotiť → voliteľný názov → HEX**.
+Slovenská mobilná PWA: **FILAMENT ME → odfotiť → voliteľný názov → HEX**.
+
+Server je napísaný v **Go** so štandardnou knižnicou, bez externých Go závislostí. HTML, CSS, JavaScript, ikony a offline service worker sú zabudované do jedného spustiteľného súboru pomocou `go:embed`. Na cieľovom serveri netreba Node.js, Go ani priečinok `public/`.
+
+## Čo aplikácia vie
 
 - Bez názvu určí dominantnú farbu zo stredu fotky priamo v zariadení, aj offline.
-- Ťuknutím na fotku vyberieš konkrétne miesto. Na klávesnici fungujú šípky.
-- S názvom pošle zmenšenú fotku, vybraný HEX a názov serveru; OpenAI Responses API s webovým vyhľadávaním sa pokúsi nájsť presný filament na stránke výrobcu.
-- Výsledok odlišuje výrobcom uvedený HEX od vizuálneho odhadu a obsahuje odkaz na zdroj. Neoverený výsledok alebo chyba služby ponechá odhad z fotky.
+- Ťuknutím na fotku vyberieš konkrétne miesto; na klávesnici fungujú šípky.
+- S názvom odošle zmenšenú fotku, vybraný HEX a názov serveru. OpenAI Responses API s webovým vyhľadávaním sa pokúsi nájsť presný filament na stránke výrobcu.
+- Výsledok odlišuje výrobcom uvedený HEX od vizuálneho odhadu a obsahuje zdroj. Neoverený výsledok alebo chyba služby ponechá odhad z fotky.
 - Kopírovanie HEX, posledných 12 výsledkov v miestnom úložisku, inštalácia na plochu a offline režim. Fotografie sa do histórie neukladajú.
-- Bez knižníc a bez zostavovania. Node.js 22+ alebo Docker.
 
-## Spustenie
+Mobilná PWA ostáva v HTML/CSS/JavaScripte, pretože fotoaparát a offline režim bežia v prehliadači. Go zabezpečuje server, online vyhľadávanie a doručenie zabudovaných súborov.
+
+## Jeden spustiteľný súbor
+
+Pri použití hotového balíka pre svoju architektúru rozbaľ súbory do jedného priečinka, skopíruj `.env.example` na `.env` a spusti:
 
 ```sh
+chmod +x find-filament
 cp .env.example .env
-npm start
+./find-filament
 ```
 
-Otvor `http://localhost:3000`. V `.env` nastav:
+Otvor `http://localhost:3000`. Bez API kľúča fungujú všetky miestne funkcie. Pre online vyhľadávanie v `.env` nastav:
 
 ```dotenv
+PORT=3000
+HOST=0.0.0.0
 OPENAI_API_KEY=tvoj_kluc
 OPENAI_MODEL=gpt-4.1
 LOOKUP_PASSWORD=tvoje_heslo
-PORT=3000
-HOST=0.0.0.0
 ```
 
-**Bez API kľúča fungujú všetky miestne funkcie.** Online vyhľadávanie vyžaduje platný kľúč, podporovaný model a kredit na OpenAI API (účtuje sa model aj webové vyhľadávanie). Kľúč nikdy nedávaj do `public/`, aplikácie v mobile ani Gitu. `LOOKUP_PASSWORD` chráni platené online vyhľadávanie; používateľ ho zadá v nastaveniach aplikácie a ostáva iba v pamäti otvorenej stránky. Po zmene `.env` reštartuj server.
+`.env` sa automaticky číta z aktuálneho pracovného priečinka. Iný súbor zvolíš cez `./find-filament -env /cesta/filament.env`. Premenné prostredia majú prednosť pred súborom, aj keď sú prázdne. Podporované sú riadky `KEY=value`, prázdne riadky, komentáre na samostatnom riadku, `export KEY=value` a hodnoty v jednoduchých alebo dvojitých úvodzovkách. Hodnoty s medzerami či `#` dávaj do úvodzoviek; premenné sa v hodnotách nerozbaľujú. Po zmene konfigurácie reštartuj proces.
 
-## Nasadenie na vlastný server
+Online vyhľadávanie vyžaduje platný API kľúč, podporovaný model a kredit na OpenAI API; účtuje sa model aj webové vyhľadávanie. Kľúč nedávaj do `public/`, mobilného rozhrania ani Gitu. `LOOKUP_PASSWORD` chráni platené vyhľadávanie: zadáva sa v nastaveniach aplikácie a ostáva iba v pamäti otvorenej stránky.
 
-### Docker
+## Zostavenie zo zdrojov
 
-Po vytvorení `.env`:
+Na zostavenie potrebuješ Go 1.26 alebo novšie. Odporúčaná a overená verzia je Go 1.27.3.
 
 ```sh
+go build -trimpath -ldflags="-s -w" -o find-filament .
+./find-filament
+```
+
+Na vývoj môžeš použiť `go run .`. Pri zmene súborov v `public/` znovu zostav alebo spusti Go proces, aby sa zmeny vložili do aplikácie.
+
+Zostavenie pre bežný Linux server z ľubovoľného podporovaného počítača:
+
+```sh
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o find-filament .
+```
+
+Pre ARM64 server (napríklad Raspberry Pi so 64-bitovým systémom) použi `GOARCH=arm64`. Vyber zostavenie podľa operačného systému a architektúry cieľového servera. Súbor zo zostavenia obsahuje celé rozhranie; pri prenose stačí tento súbor a vlastná konfigurácia.
+
+## Docker a HTTPS
+
+```sh
+cp .env.example .env
+# Uprav .env a doplň kľúč a heslo.
 docker compose up -d --build
 ```
 
-Aplikácia počúva na `127.0.0.1:3000`. Pred ňu daj HTTPS reverzný proxy server, napríklad Caddy:
+Docker zostaví Go aplikáciu a spustí ju v minimálnom obraze ako používateľ bez práv správcu. Obsahuje binárku a koreňové certifikáty na HTTPS spojenie s OpenAI. Go ani Node.js nie sú súčasťou výsledného obrazu. Compose načíta `.env` ako premenné prostredia.
+
+Aplikácia je dostupná na `127.0.0.1:3000`. Pred ňu daj HTTPS reverzný proxy server, napríklad Caddy:
 
 ```caddyfile
 filament.tvoja-domena.sk {
@@ -58,26 +87,37 @@ location / {
 }
 ```
 
-Odporúčané nasadenie je na samostatnej doméne/subdoméne v koreňovej ceste `/`. Pre priamy Node.js proces použi správcu procesov, napríklad systemd; `npm start` načíta `.env`. Bežný čisto statický webhosting nevykoná `server.mjs`: pre kompletné online funkcie potrebuješ Node.js alebo Docker. Samotný obsah `public/` možno hostiť staticky pre farbu z fotky, históriu a PWA; online vyhľadávanie bude nedostupné.
+Odporúčané nasadenie je v koreňovej ceste `/` na samostatnej doméne alebo subdoméne. Pri priamom spustení binárky zabezpeč jej automatický štart napríklad cez systemd. Proces spracuje SIGINT/SIGTERM a dá rozbehnutým požiadavkám čas na dokončenie. Štandardný timeout online vyhľadávania je 75 sekúnd.
 
-**Na mobile použi HTTPS.** Výnimkou pre vývoj je localhost na tom istom zariadení. Cudzia LAN IP cez HTTP neposkytuje plnohodnotnú inštalovateľnú PWA. Tlačidlo používa natívny výber fotografie s `capture="environment"`; podporované mobilné prehliadače ponúknu zadný fotoaparát, iné môžu ponúknuť výber súboru. Galéria je dostupná samostatne. Inštalácia: Android menu prehliadača → Inštalovať / Pridať na plochu; iOS Safari → Zdieľať → Pridať na plochu. Offline použitie vyžaduje aspoň jedno úspešné otvorenie online.
+Na mobile použi **HTTPS**. Výnimkou pre vývoj je localhost na tom istom zariadení. LAN IP cez HTTP neposkytuje plnohodnotnú inštalovateľnú PWA. Tlačidlo používa natívny výber fotografie s `capture="environment"`; podporované mobilné prehliadače ponúknu zadný fotoaparát, iné môžu ponúknuť výber súboru. Galéria je dostupná samostatne.
+
+Inštalácia: Android → menu prehliadača → Inštalovať / Pridať na plochu; iOS Safari → Zdieľať → Pridať na plochu. Offline použitie vyžaduje aspoň jedno úspešné otvorenie online. Samotný priečinok `public/` možno hostiť aj staticky pre farbu z fotky a históriu; kompletné online funkcie vyžadujú bežiaci Go server.
 
 ## Presnosť a súkromie
 
 HEX z fotografie je odhad z najčastejšieho odtieňa v malej oblasti, nie kalibrované meranie. Foť pri rozptýlenom dennom svetle a vyber miesto bez odlesku, tieňa a cievky. Priehľadné, metalické, silk, trblietavé a viacfarebné materiály nemusia mať jeden reprezentatívny HEX. Výrobcom udaný HEX má prednosť len ak ho vyhľadávanie nájde na konkrétnej stránke; model môže napriek kontrolám urobiť chybu, preto je zdroj viditeľný na overenie.
 
-Bez názvu fotka zariadenie neopustí. S názvom a stlačením „Nájsť môj HEX“ sa do OpenAI odošle názov a JPEG zmenšený na maximálne 1200 px spolu s vybraným odtieňom. Na serveri sa fotografie nezapisujú na disk, požiadavky používajú `store: false`; na spracovanie dát poskytovateľom sa vzťahujú jeho API podmienky. História obsahuje len HEX, názov, vysvetlenie a zdroj a dá sa vymazať tlačidlom. Service worker ukladá iba súbory aplikácie; API odpovede necachuje.
+Bez názvu fotka zariadenie neopustí. S názvom a stlačením „Nájsť môj HEX“ sa do OpenAI odošle názov a JPEG zmenšený na maximálne 1200 px spolu s vybraným odtieňom. Server fotografie nezapisuje na disk a požiadavky používajú `store: false`; na spracovanie dát poskytovateľom sa vzťahujú jeho API podmienky. História obsahuje HEX, názov, vysvetlenie a zdroj a dá sa vymazať tlačidlom. Service worker ukladá iba súbory aplikácie; API odpovede necachuje.
 
-Server obmedzuje veľkosť požiadavky, počet vyhľadávaní a paralelné volania. Limit je 6 požiadaviek za minútu na priamo pripojenú IP a 3 súčasné volania; za reverzným proxy môže byť limit zdieľaný všetkými používateľmi. Pri viacerých procesoch je limit samostatný pre každý proces. Pre osobnú verejne dostupnú aplikáciu nastav `LOOKUP_PASSWORD`. Databáza nie je potrebná.
+Server obmedzuje veľkosť požiadavky, počet vyhľadávaní a paralelné volania. Limit je 6 požiadaviek za minútu na priamo pripojenú IP a 3 súčasné volania, bezpečne aj pri súbežných požiadavkách. Za reverzným proxy môže byť limit zdieľaný všetkými používateľmi; server nedôveruje hlavičke `X-Forwarded-For`. Pri viacerých procesoch je limit samostatný pre každý proces. Pre osobnú verejne dostupnú aplikáciu nastav `LOOKUP_PASSWORD`. Databáza nie je potrebná.
 
-## Overenie
+## Testy
 
 ```sh
-npm test
+go test -race ./...
+go vet ./...
 ```
 
-Testy pokrývajú dominantnú farbu, vstupy, odmietnutie nevystopovateľného zdroja, HTTP rozhranie, ochranu súborov, heslo, chýbajúci kľúč a požiadavku na online službu so simulovanou odpoveďou. Živé volanie OpenAI nie je súčasťou testov a vyžaduje vlastný kľúč. Na reálnom mobile ešte over otvorenie fotoaparátu, inštaláciu a offline režim v cieľovom prehliadači.
+Go testy pokrývajú zabudované súbory a ich typy, konfiguráciu, overenie vstupov, zdroj výrobcu, autentifikáciu, pôvod požiadaviek, veľkosť obrázka, súbežné limity, chyby online služby a formát požiadavky so simulovanou odpoveďou. Reálny OpenAI kľúč nepoužívajú.
 
-Pri aktualizácii obsahu aplikácie zvýš verziu `CACHE` v `public/sw.js`. Nový service worker sa aktivuje po zavretí starých okien aplikácie.
+Voliteľný test algoritmu farby v prehliadači používa Node.js iba ako vývojový testovací nástroj:
 
-Technická dokumentácia: [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search), [obrazové vstupy](https://developers.openai.com/api/docs/guides/images-vision).
+```sh
+node --test tests/color.test.mjs
+```
+
+Node.js nie je potrebný na zostavenie ani prevádzku aplikácie. Živé vyhľadávanie vyžaduje vlastný API kľúč. Otvorenie fotoaparátu a inštaláciu ešte over na svojom mobile v cieľovom prehliadači.
+
+Pri aktualizácii obsahu zvýš verziu `CACHE` v `public/sw.js`. Nový service worker sa aktivuje po zavretí starých okien aplikácie. Po prechode z Node.js na Go zostáva existujúca lokálna paleta zachovaná, ak používaš rovnakú doménu a prehliadač.
+
+Technická dokumentácia: [Go embedded files](https://pkg.go.dev/embed), [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search), [obrazové vstupy](https://developers.openai.com/api/docs/guides/images-vision).
