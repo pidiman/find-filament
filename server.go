@@ -80,6 +80,9 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "Nenájdené.")
 		return
 	}
+	if name == "index.html" || name == "sw.js" {
+		data = bytes.ReplaceAll(data, []byte("__COMMIT__"), []byte(commitID()))
+	}
 	contentType := mime.TypeByExtension(path.Ext(name))
 	switch path.Ext(name) {
 	case ".mjs", ".js":
