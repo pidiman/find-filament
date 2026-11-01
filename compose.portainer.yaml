@@ -1,0 +1,13 @@
+services:
+  filament:
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 90s
+    environment:
+      PORT: "8098"
+      HOST: "0.0.0.0"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4.1}"
+      LOOKUP_PASSWORD: "${LOOKUP_PASSWORD:-}"
+    ports:
+      - "8098:8098"
