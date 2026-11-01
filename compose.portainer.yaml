@@ -1,6 +1,9 @@
 services:
   filament:
-    build: .
+    build:
+      context: .
+      args:
+        SOURCE_REPOSITORY: https://github.com/pidiman/find-filament.git
     pull_policy: build
     restart: unless-stopped
     stop_grace_period: 90s
