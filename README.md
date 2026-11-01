@@ -93,6 +93,28 @@ Na mobile použi **HTTPS**. Výnimkou pre vývoj je localhost na tom istom zaria
 
 Inštalácia: Android → menu prehliadača → Inštalovať / Pridať na plochu; iOS Safari → Zdieľať → Pridať na plochu. Offline použitie vyžaduje aspoň jedno úspešné otvorenie online. Samotný priečinok `public/` možno hostiť aj staticky pre farbu z fotky a históriu; kompletné online funkcie vyžadujú bežiaci Go server.
 
+## Portainer + Nginx Proxy Manager na inom stroji
+
+V Portaineri vytvor stack `find-filament` zo zdroja `https://github.com/pidiman/find-filament.git`, vetvy `refs/heads/main` a súboru **`compose.portainer.yaml`**. Tento súbor nepotrebuje serverový súbor `.env`: premenné nastavuješ priamo v Portaineri.
+
+Aktuálne nasadenie používa port **8098** na hostiteľovi aj v kontajneri. Nginx Proxy Manager smeruje **`find-filament.pidiman.sk` → `http://192.168.1.27:8098`**, má zapnuté HTTPS a Force SSL. Port 3000 sa pri tomto nasadení nepoužíva.
+
+API kľúč doplníš v **Stacks → find-filament → Edit stack settings → Environment variables**:
+
+- `OPENAI_API_KEY`: vlastný API kľúč.
+- `OPENAI_MODEL`: `gpt-4.1`.
+- `LOOKUP_PASSWORD`: voliteľné vlastné heslo pre platené vyhľadávanie; zadáva sa aj v nastaveniach mobilnej aplikácie.
+
+Po úprave premenných stack znovu nasaď cez jeho ovládanie v Portaineri, aby sa kontajner vytvoril s novými hodnotami. Kľúč nepatrí do repozitára ani do konfigurácie proxy. Bez kľúča ostáva dostupná farba z fotky a história.
+
+V Nginx Proxy Manageri je vlastná konfigurácia:
+
+```nginx
+client_max_body_size 3m;
+proxy_read_timeout 100s;
+proxy_send_timeout 100s;
+```
+
 ## Presnosť a súkromie
 
 HEX z fotografie je odhad z najčastejšieho odtieňa v malej oblasti, nie kalibrované meranie. Foť pri rozptýlenom dennom svetle a vyber miesto bez odlesku, tieňa a cievky. Priehľadné, metalické, silk, trblietavé a viacfarebné materiály nemusia mať jeden reprezentatívny HEX. Výrobcom udaný HEX má prednosť len ak ho vyhľadávanie nájde na konkrétnej stránke; model môže napriek kontrolám urobiť chybu, preto je zdroj viditeľný na overenie.
