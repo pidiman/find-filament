@@ -1,13 +1,17 @@
 services:
   filament:
     build: .
+    pull_policy: build
     restart: unless-stopped
     stop_grace_period: 90s
     environment:
       PORT: "8098"
       HOST: "0.0.0.0"
+      AI_PROVIDER: "${AI_PROVIDER:-openai}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4.1}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      OPENROUTER_MODEL: "${OPENROUTER_MODEL:-google/gemini-3.8-flash}"
       LOOKUP_PASSWORD: "${LOOKUP_PASSWORD:-}"
     ports:
       - "8098:8098"

@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -116,7 +115,13 @@ func parseResult(response upstreamResponse) (identifyResult, error) {
 			}
 		}
 	}
-	text := strings.TrimSpace(strings.Join(texts, "\n"))
+	return parseCandidate(strings.Join(texts, "\n"), sources)
+}
+
+// Both providers must supply an actual citation for the claimed manufacturer URL.
+// A URL generated only in the model's JSON is never sufficient evidence.
+func parseCandidate(text string, sources map[string]bool) (identifyResult, error) {
+	text = strings.TrimSpace(text)
 	if strings.HasPrefix(text, "```") {
 		text = strings.TrimPrefix(text, "```")
 		text = strings.TrimPrefix(text, "json")
@@ -154,20 +159,30 @@ func (a *app) identify(ctx context.Context, input identifyInput) (identifyResult
 	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
 	defer cancel()
 	description, _ := json.Marshal(map[string]string{"name": input.Name, "selectedPhotoHex": input.PhotoHex})
+	endpoint := "https://api.openai.com/v1/responses"
 	payload := map[string]any{
 		"model": a.config.Model, "store": false, "tools": []any{map[string]string{"type": "web_search"}}, "tool_choice": "required", "include": []string{"web_search_call.action.sources"}, "max_output_tokens": 1600, "instructions": identifyInstructions,
 		"input": []any{map[string]any{"role": "user", "content": []any{map[string]string{"type": "input_text", "text": string(description)}, map[string]string{"type": "input_image", "image_url": input.Image, "detail": "low"}}}},
+	}
+	if a.config.Provider == "openrouter" {
+		endpoint = "https://openrouter.ai/api/v1/chat/completions"
+		payload = openRouterPayload(a.config.Model, string(description), input.Image)
+	} else if a.config.Provider != "" && a.config.Provider != "openai" {
+		return identifyResult{}, errors.New("Neplatný poskytovateľ AI na serveri.")
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return identifyResult{}, errors.New("Požiadavku sa nepodarilo pripraviť.")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/responses", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return identifyResult{}, errors.New("Požiadavku sa nepodarilo pripraviť.")
 	}
 	req.Header.Set("Authorization", "Bearer "+a.config.APIKey)
 	req.Header.Set("Content-Type", "application/json")
+	if a.config.Provider == "openrouter" {
+		req.Header.Set("X-Title", "Find Filament")
+	}
 	response, err := a.client.Do(req)
 	if err != nil {
 		var networkError net.Error
@@ -178,6 +193,9 @@ func (a *app) identify(ctx context.Context, input identifyInput) (identifyResult
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		if response.StatusCode == 402 {
+			return identifyResult{}, errors.New("Online služba nemá dostatočný kredit. Doplň kredit u poskytovateľa AI.")
+		}
 		if response.StatusCode == 429 {
 			return identifyResult{}, errors.New("Služba vyhľadávania je vyťažená alebo nemá kredit. Skús neskôr.")
 		}
@@ -188,9 +206,12 @@ func (a *app) identify(ctx context.Context, input identifyInput) (identifyResult
 	if err != nil || len(data) > responseLimit {
 		return identifyResult{}, errors.New("Odpoveď vyhľadávania sa nepodarilo prečítať.")
 	}
+	if a.config.Provider == "openrouter" {
+		return parseOpenRouterResult(data)
+	}
 	var decoded upstreamResponse
 	if err := json.Unmarshal(data, &decoded); err != nil {
-		return identifyResult{}, fmt.Errorf("Vyhľadávanie nevrátilo platnú odpoveď.")
+		return identifyResult{}, errors.New("Vyhľadávanie nevrátilo platnú odpoveď.")
 	}
 	return parseResult(decoded)
 }

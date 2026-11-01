@@ -8,7 +8,9 @@ import (
 	"strings"
 )
 
-type config struct{ Host, Port, APIKey, Model, Password string }
+type config struct{ Host, Port, Provider, APIKey, Model, Password string }
+
+const defaultOpenRouterModel = "google/gemini-3.8-flash"
 
 // Read a small dotenv format without changing process-wide environment variables.
 // Support KEY=value, export, whole-line comments and single/double quoted values.
@@ -63,13 +65,24 @@ func loadConfig(filename string, lookup func(string) (string, bool)) (config, er
 		}
 		return fallback
 	}
-	cfg := config{Host: get("HOST", "0.0.0.0"), Port: get("PORT", "3000"), APIKey: get("OPENAI_API_KEY", ""), Model: get("OPENAI_MODEL", "gpt-4.1"), Password: get("LOOKUP_PASSWORD", "")}
+	provider := strings.ToLower(strings.TrimSpace(get("AI_PROVIDER", "openai")))
+	if provider == "" {
+		provider = "openai"
+	}
+	if provider != "openai" && provider != "openrouter" {
+		return config{}, fmt.Errorf("AI_PROVIDER must be openai or openrouter")
+	}
+	keyName, modelName, defaultModel := "OPENAI_API_KEY", "OPENAI_MODEL", "gpt-4.1"
+	if provider == "openrouter" {
+		keyName, modelName, defaultModel = "OPENROUTER_API_KEY", "OPENROUTER_MODEL", defaultOpenRouterModel
+	}
+	cfg := config{Host: get("HOST", "0.0.0.0"), Port: get("PORT", "3000"), Provider: provider, APIKey: strings.TrimSpace(get(keyName, "")), Model: strings.TrimSpace(get(modelName, defaultModel)), Password: get("LOOKUP_PASSWORD", "")}
 	port, err := strconv.Atoi(cfg.Port)
 	if err != nil || port < 1 || port > 65535 {
 		return config{}, fmt.Errorf("PORT must be between 1 and 65535")
 	}
 	if strings.TrimSpace(cfg.Model) == "" {
-		cfg.Model = "gpt-4.1"
+		cfg.Model = defaultModel
 	}
 	return cfg, nil
 }

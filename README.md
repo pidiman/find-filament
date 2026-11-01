@@ -8,7 +8,7 @@ Server je napísaný v **Go** so štandardnou knižnicou, bez externých Go záv
 
 - Bez názvu určí dominantnú farbu zo stredu fotky priamo v zariadení, aj offline.
 - Ťuknutím na fotku vyberieš konkrétne miesto; na klávesnici fungujú šípky.
-- S názvom odošle zmenšenú fotku, vybraný HEX a názov serveru. OpenAI Responses API s webovým vyhľadávaním sa pokúsi nájsť presný filament na stránke výrobcu.
+- S názvom odošle zmenšenú fotku, vybraný HEX a názov serveru. Nastavený poskytovateľ AI (OpenAI alebo OpenRouter) s webovým vyhľadávaním sa pokúsi nájsť presný filament na stránke výrobcu.
 - Výsledok odlišuje výrobcom uvedený HEX od vizuálneho odhadu a obsahuje zdroj. Neoverený výsledok alebo chyba služby ponechá odhad z fotky.
 - Kopírovanie HEX, posledných 12 výsledkov v miestnom úložisku, inštalácia na plochu a offline režim. Fotografie sa do histórie neukladajú.
 
@@ -29,6 +29,7 @@ Otvor `http://localhost:3000`. Bez API kľúča fungujú všetky miestne funkcie
 ```dotenv
 PORT=3000
 HOST=0.0.0.0
+AI_PROVIDER=openai
 OPENAI_API_KEY=tvoj_kluc
 OPENAI_MODEL=gpt-4.1
 LOOKUP_PASSWORD=tvoje_heslo
@@ -36,7 +37,7 @@ LOOKUP_PASSWORD=tvoje_heslo
 
 `.env` sa automaticky číta z aktuálneho pracovného priečinka. Iný súbor zvolíš cez `./find-filament -env /cesta/filament.env`. Premenné prostredia majú prednosť pred súborom, aj keď sú prázdne. Podporované sú riadky `KEY=value`, prázdne riadky, komentáre na samostatnom riadku, `export KEY=value` a hodnoty v jednoduchých alebo dvojitých úvodzovkách. Hodnoty s medzerami či `#` dávaj do úvodzoviek; premenné sa v hodnotách nerozbaľujú. Po zmene konfigurácie reštartuj proces.
 
-Online vyhľadávanie vyžaduje platný API kľúč, podporovaný model a kredit na OpenAI API; účtuje sa model aj webové vyhľadávanie. Kľúč nedávaj do `public/`, mobilného rozhrania ani Gitu. `LOOKUP_PASSWORD` chráni platené vyhľadávanie: zadáva sa v nastaveniach aplikácie a ostáva iba v pamäti otvorenej stránky.
+Online vyhľadávanie vyžaduje platný API kľúč, podporovaný model a kredit u zvoleného poskytovateľa; účtuje sa model aj webové vyhľadávanie. Kľúč nedávaj do `public/`, mobilného rozhrania ani Gitu. `LOOKUP_PASSWORD` chráni platené vyhľadávanie: zadáva sa v nastaveniach aplikácie a ostáva iba v pamäti otvorenej stránky.
 
 ## Zostavenie zo zdrojov
 
@@ -65,7 +66,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Docker zostaví Go aplikáciu a spustí ju v minimálnom obraze ako používateľ bez práv správcu. Obsahuje binárku a koreňové certifikáty na HTTPS spojenie s OpenAI. Go ani Node.js nie sú súčasťou výsledného obrazu. Compose načíta `.env` ako premenné prostredia.
+Docker zostaví Go aplikáciu a spustí ju v minimálnom obraze ako používateľ bez práv správcu. Obsahuje binárku a koreňové certifikáty na HTTPS spojenie s poskytovateľmi AI. Go ani Node.js nie sú súčasťou výsledného obrazu. Compose načíta `.env` ako premenné prostredia.
 
 Aplikácia je dostupná na `127.0.0.1:3000`. Pred ňu daj HTTPS reverzný proxy server, napríklad Caddy:
 
@@ -97,7 +98,7 @@ Inštalácia: Android → menu prehliadača → Inštalovať / Pridať na plochu
 
 V Portaineri vytvor stack `find-filament` zo zdroja `https://github.com/pidiman/find-filament.git`, vetvy `refs/heads/main` a súboru **`compose.portainer.yaml`**. Tento súbor nepotrebuje serverový súbor `.env`: premenné nastavuješ priamo v Portaineri.
 
-Aktuálne nasadenie používa port **8098** na hostiteľovi aj v kontajneri. Nginx Proxy Manager smeruje **`find-filament.pidiman.sk` → `http://192.168.1.27:8098`**, má zapnuté HTTPS a Force SSL. Port 3000 sa pri tomto nasadení nepoužíva.
+Šablóna používa port **8098** na hostiteľovi aj v kontajneri. V Nginx Proxy Manageri nastav vlastnú doménu, HTTP spojenie na IP svojho aplikačného servera a port 8098. Pre mobilnú PWA zapni HTTPS.
 
 API kľúč doplníš v **Stacks → find-filament → Edit stack settings → Environment variables**:
 
@@ -105,7 +106,7 @@ API kľúč doplníš v **Stacks → find-filament → Edit stack settings → E
 - `OPENAI_MODEL`: `gpt-4.1`.
 - `LOOKUP_PASSWORD`: voliteľné vlastné heslo pre platené vyhľadávanie; zadáva sa aj v nastaveniach mobilnej aplikácie.
 
-Po úprave premenných stack znovu nasaď cez jeho ovládanie v Portaineri, aby sa kontajner vytvoril s novými hodnotami. Kľúč nepatrí do repozitára ani do konfigurácie proxy. Bez kľúča ostáva dostupná farba z fotky a história.
+Po úprave premenných stack znovu nasaď cez jeho ovládanie v Portaineri, aby sa kontajner vytvoril s novými hodnotami. Kľúč nepatrí do repozitára ani do konfigurácie proxy. Bez kľúča ostáva dostupná farba z fotky a história. Pri **Pull and redeploy** sa obraz vďaka `pull_policy: build` znovu zostaví aj pri existujúcom lokálnom obraze.
 
 V Nginx Proxy Manageri je vlastná konfigurácia:
 
@@ -115,11 +116,29 @@ proxy_read_timeout 100s;
 proxy_send_timeout 100s;
 ```
 
+## Prepnutie OpenAI / OpenRouter
+
+Poskytovateľ sa nastavuje na serveri v Portaineri alebo v `.env`. V mobile netreba meniť nič a žiadny API kľúč sa neposiela do prehliadača. Predvolená hodnota `AI_PROVIDER=openai` zachováva existujúce nasadenie.
+
+Pre OpenRouter nastav:
+
+```dotenv
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=tvoj_openrouter_kluc
+OPENROUTER_MODEL=google/gemini-3.8-flash
+```
+
+Pre návrat k OpenAI nastav `AI_PROVIDER=openai` a použi `OPENAI_API_KEY` / `OPENAI_MODEL`. Každý poskytovateľ má samostatný kľúč a model; kľúč jedného sa nikdy nepoužije u druhého. `LOOKUP_PASSWORD` zostáva spoločné pre ochranu online vyhľadávania. Po úprave **Edit stack settings → Environment variables** zaškrtni **Redeploy** a klikni **Save settings**. Pri prvom nasadení podpory nového poskytovateľa použi **Pull and redeploy**, aby sa načítal nový kód z Gitu.
+
+Odporúčaný počiatočný model je **`google/gemini-3.8-flash`**, ktorý podporuje obrazový vstup. Lacnejšia alternatíva je **`google/gemini-2.5-flash`**. Výber vychádza z podporovaných funkcií a triedy modelov; presnosť pre konkrétne filamenty nie je samostatne zmeraná. Iný model môžeš nastaviť cez `OPENROUTER_MODEL`, musí však podporovať fotografie a JSON odpoveď. Aktuálnu dostupnosť a cenu over na OpenRouteri.
+
+OpenRouter používa Chat Completions API, obrazový vstup a webový plugin **Exa s najviac 5 výsledkami**. Vyhľadávanie je súčasťou každej požiadavky s názvom a má vlastný poplatok navyše k modelu. Nepotrebuješ samostatný Exa kľúč. Model dostane názov, zmenšenú fotku a odtieň, porovná ich s dohľadaným produktom a vráti HEX. Zdroj musí byť prítomný v citáciách v skutočnej API odpovedi; samotný odkaz v texte vygenerovanom modelom nestačí. Bez overiteľného zdroja aplikácia ponechá farbu z fotky.
+
 ## Presnosť a súkromie
 
 HEX z fotografie je odhad z najčastejšieho odtieňa v malej oblasti, nie kalibrované meranie. Foť pri rozptýlenom dennom svetle a vyber miesto bez odlesku, tieňa a cievky. Priehľadné, metalické, silk, trblietavé a viacfarebné materiály nemusia mať jeden reprezentatívny HEX. Výrobcom udaný HEX má prednosť len ak ho vyhľadávanie nájde na konkrétnej stránke; model môže napriek kontrolám urobiť chybu, preto je zdroj viditeľný na overenie.
 
-Bez názvu fotka zariadenie neopustí. S názvom a stlačením „Nájsť môj HEX“ sa do OpenAI odošle názov a JPEG zmenšený na maximálne 1200 px spolu s vybraným odtieňom. Server fotografie nezapisuje na disk a požiadavky používajú `store: false`; na spracovanie dát poskytovateľom sa vzťahujú jeho API podmienky. História obsahuje HEX, názov, vysvetlenie a zdroj a dá sa vymazať tlačidlom. Service worker ukladá iba súbory aplikácie; API odpovede necachuje.
+Bez názvu fotka zariadenie neopustí. S názvom a stlačením „Nájsť môj HEX“ sa nastavenému poskytovateľovi AI odošle názov a JPEG zmenšený na maximálne 1200 px spolu s vybraným odtieňom. Server fotografie nezapisuje na disk. Pri OpenAI sa používa `store: false`. Pri OpenRouteri sa údaje spracúvajú cez OpenRouter a poskytovateľa zvoleného modelu; výsledky webu zabezpečuje Exa. Uchovávanie a spracovanie dát sa riadi nastaveniami účtu a podmienkami jednotlivých služieb. História obsahuje HEX, názov, vysvetlenie a zdroj a dá sa vymazať tlačidlom. Service worker ukladá iba súbory aplikácie; API odpovede necachuje.
 
 Server obmedzuje veľkosť požiadavky, počet vyhľadávaní a paralelné volania. Limit je 6 požiadaviek za minútu na priamo pripojenú IP a 3 súčasné volania, bezpečne aj pri súbežných požiadavkách. Za reverzným proxy môže byť limit zdieľaný všetkými používateľmi; server nedôveruje hlavičke `X-Forwarded-For`. Pri viacerých procesoch je limit samostatný pre každý proces. Pre osobnú verejne dostupnú aplikáciu nastav `LOOKUP_PASSWORD`. Databáza nie je potrebná.
 
@@ -130,7 +149,7 @@ go test -race ./...
 go vet ./...
 ```
 
-Go testy pokrývajú zabudované súbory a ich typy, konfiguráciu, overenie vstupov, zdroj výrobcu, autentifikáciu, pôvod požiadaviek, veľkosť obrázka, súbežné limity, chyby online služby a formát požiadavky so simulovanou odpoveďou. Reálny OpenAI kľúč nepoužívajú.
+Go testy pokrývajú zabudované súbory a ich typy, konfiguráciu, overenie vstupov, zdroj výrobcu, autentifikáciu, pôvod požiadaviek, veľkosť obrázka, súbežné limity, chyby online služby a formát požiadavky so simulovanou odpoveďou. Testujú obe API rozhrania so simulovanými odpoveďami vrátane citácií OpenRoutera, výberu správneho kľúča a zachovania pôvodného OpenAI nastavenia. Reálne API kľúče nepoužívajú.
 
 Voliteľný test algoritmu farby v prehliadači používa Node.js iba ako vývojový testovací nástroj:
 
@@ -138,8 +157,10 @@ Voliteľný test algoritmu farby v prehliadači používa Node.js iba ako vývoj
 node --test tests/color.test.mjs
 ```
 
-Node.js nie je potrebný na zostavenie ani prevádzku aplikácie. Živé vyhľadávanie vyžaduje vlastný API kľúč. Otvorenie fotoaparátu a inštaláciu ešte over na svojom mobile v cieľovom prehliadači.
+Node.js nie je potrebný na zostavenie ani prevádzku aplikácie. Živé vyhľadávanie vyžaduje vlastný API kľúč zvoleného poskytovateľa; bez neho nie je živá integrácia overená. Otvorenie fotoaparátu a inštaláciu ešte over na svojom mobile v cieľovom prehliadači.
 
 Pri aktualizácii obsahu zvýš verziu `CACHE` v `public/sw.js`. Nový service worker sa aktivuje po zavretí starých okien aplikácie. Po prechode z Node.js na Go zostáva existujúca lokálna paleta zachovaná, ak používaš rovnakú doménu a prehliadač.
 
 Technická dokumentácia: [Go embedded files](https://pkg.go.dev/embed), [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search), [obrazové vstupy](https://developers.openai.com/api/docs/guides/images-vision).
+
+OpenRouter dokumentácia: [model Gemini 3.8 Flash](https://openrouter.ai/google/gemini-3.8-flash), [Gemini 2.5 Flash](https://openrouter.ai/google/gemini-2.5-flash), [webový plugin a citácie](https://openrouter.ai/docs/guides/features/plugins/web-search).

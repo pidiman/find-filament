@@ -138,7 +138,11 @@ func (a *app) identifyHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if a.config.APIKey == "" {
-		fail(w, 503, "Online vyhľadávanie ešte nie je nastavené. Na serveri doplň OPENAI_API_KEY.")
+		keyName := "OPENAI_API_KEY"
+		if a.config.Provider == "openrouter" {
+			keyName = "OPENROUTER_API_KEY"
+		}
+		fail(w, 503, "Online vyhľadávanie ešte nie je nastavené. Na serveri doplň "+keyName+".")
 		return
 	}
 	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
